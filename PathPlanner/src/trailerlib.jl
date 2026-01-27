@@ -12,32 +12,46 @@ module trailerlib
 using PyPlot
 using NearestNeighbors
 
-# Towing car 크기 조정
-const SCALE = 0.1
+# ---------------------------------------------------------
+# 1. 파라미터 설정 (사용자 요청 값 적용)
+# ---------------------------------------------------------
+const SCALE = 1.0  # 미터 단위 직접 사용
 
-const WB  = 3.7  * SCALE   # wheel base: rear to front steer
-const LT  = 3.0  * SCALE   # hinge - trailer ref distance
-const W   = 10.0 * SCALE   # airplane wing span (effective width)
-const LF  = 4.5  * SCALE   # rear axle -> vehicle front
-const LB  = 1.0  * SCALE   # rear axle -> vehicle back
-const LTF = 2.0  * SCALE   # towingcar <-> airplane distance
-const LTB = 9.0  * SCALE   # from connection to airplane tail
-const MAX_STEER = 0.6      # rad
+# [Towing Car]
+const WB    = 0.145 * SCALE  # 축간 거리 (Wheel base)
+const LF    = 0.24  * SCALE  # 뒷바퀴 중심 -> 차 맨 앞 (Front Length)
+const LB    = 0.03  * SCALE  # 뒷바퀴 중심 -> 차 맨 뒤 (Back Length)
+const W_CAR = 0.15  * SCALE  # 차폭 (Car Width) - 새로 추가됨
 
-# plot용
-const TR = 0.5 * SCALE     # tyre radius
-const TW = 1.0 * SCALE     # tyre width
+# [Trailer / Airplane]
+const LT      = 0.09 * SCALE   # 연결부(Hinge) -> 트레일러 축 (견인 길이)
+const W_PLANE = 0.32 * SCALE   # 비행기 날개폭 (Airplane Width) - 기존 W 대체
+const LTF     = 0.05 * SCALE   # 연결부 -> 비행기 앞부분 (여유공간 5cm 설정)
+const LTB     = 0.37 * SCALE   # 연결부 -> 비행기 꼬리
 
-# Collision check
-const CLEAR = 0.30 * SCALE # 날개폭 + 마진
-const I = W + CLEAR
+const MAX_STEER = 0.7          # [rad] 최대 조향각
 
-# 토잉카 앞부분에서 비행기 꼬리까지 커버하는 단일 직사각형
-# rear axle 기준으로 뒤로 길게 빼야 비행기까지 포함됨
-const C = LF + 0.20 * SCALE
-const B = (LB + LT + LTF + LTB) + 0.20 * SCALE
+# ---------------------------------------------------------
+# 2. 충돌 체크용 마진 및 버블 설정
+# ---------------------------------------------------------
+# plot용 타이어 크기 (비례적으로 대략 설정)
+const TR = 0.02 * SCALE     # tyre radius
+const TW = 0.01 * SCALE     # tyre width
 
-# 직사각형 꼭짓점
+# Collision check margin
+# 가장 넓은 폭(비행기) 기준으로 안전 영역 설정
+const CLEAR = 0.10 * SCALE # 여유 마진 (기존 0.3 -> 0.1로 조정, 필요시 변경)
+const I = W_PLANE + CLEAR  # 전체 충돌 체크 박스의 폭
+
+# 토잉카 앞부분(LF)에서 비행기 꼬리(LT+LTB)까지 커버하는 단일 직사각형
+# 이 박스는 "Bubble Check"를 위해 전체 차량을 대략적으로 감싸는 용도입니다.
+const C = LF + 0.10 * SCALE
+# 뒷쪽 길이: 차 뒤(LB) vs 트레일러 꼬리(LT+LTB) 중 더 긴 쪽 커버
+# 트레일러가 차 뒤로 훨씬 길게 뻗으므로 트레일러 기준 계산
+# (단, 꺾였을 때를 대비해 보수적으로 잡음)
+const B = (LT + LTB) + 0.10 * SCALE 
+
+# 직사각형 꼭짓점 (Bubble Check용 단순화 박스)
 const VRX = [C, C, -B, -B, C]
 const VRY = [-I/2.0, I/2.0, I/2.0, -I/2.0, -I/2.0]
 
@@ -45,7 +59,7 @@ const VRY = [-I/2.0, I/2.0, I/2.0, -I/2.0, -I/2.0]
 # rear axle -> bubble center 거리
 const WBUBBLE_DIST = (C - B) / 2.0
 # 직사각형 중심에서 모서리까지 거리 + 여유
-const WBUBBLE_R = hypot((C + B)/2.0, I/2.0) + 0.20 * SCALE
+const WBUBBLE_R = hypot((C + B)/2.0, I/2.0) + 0.05 * SCALE
 
 
 function check_collision(x::Array{Float64},
@@ -231,12 +245,13 @@ function check_trailer_collision(
 		kdtree = KDTree([ox'; oy'])
     end
 
+    # [수정] 비행기(Trailer) 충돌 박스: W_PLANE 사용
     vrxt = [LTF, LTF, -LTB, -LTB, LTF]
-    vryt = [-W/2.0, W/2.0, W/2.0, -W/2.0, -W/2.0]
+    vryt = [-W_PLANE/2.0, W_PLANE/2.0, W_PLANE/2.0, -W_PLANE/2.0, -W_PLANE/2.0]
 
     # bubble parameter
     DT = (LTF + LTB)/2.0 - LTB
-    DTR = (LTF + LTB)/2.0 + 0.3 
+    DTR = hypot((LTF+LTB)/2.0, W_PLANE/2.0) + 0.1 
 
     # check trailer
     if debug
@@ -250,12 +265,13 @@ function check_trailer_collision(
     end
 
 
+    # [수정] 토잉카(Truck) 충돌 박스: W_CAR 사용
     vrxf = [LF, LF, -LB, -LB, LF]
-    vryf = [-W/2.0, W/2.0, W/2.0, -W/2.0, -W/2.0]
+    vryf = [-W_CAR/2.0, W_CAR/2.0, W_CAR/2.0, -W_CAR/2.0, -W_CAR/2.0]
   
     # bubble parameter
     DF = (LF + LB)/2.0 - LB
-    DFR = (LF + LB)/2.0 + 0.3 
+    DFR = hypot((LF+LB)/2.0, W_CAR/2.0) + 0.1 
 
     # check front trailer
     if debug
@@ -282,34 +298,41 @@ function plot_trailer(x::Float64,
     LENGTH = LB+LF
     LENGTHt = LTB+LTF
 
+    # [수정] W_CAR 적용
     truckOutLine = [-LB (LENGTH - LB) (LENGTH - LB) (-LB) (-LB);
-                    W/2 W/2 -W/2 -W/2 W / 2]
+                    W_CAR/2 W_CAR/2 -W_CAR/2 -W_CAR/2 W_CAR / 2]
+    
+    # [수정] W_PLANE 적용
     trailerOutLine = [-LTB (LENGTHt - LTB) (LENGTHt - LTB) (-LTB) (-LTB);
-                    W/2 W/2 -W/2 -W/2 W / 2]
+                      W_PLANE/2 W_PLANE/2 -W_PLANE/2 -W_PLANE/2 W_PLANE / 2]
 
+    # 바퀴 위치도 W_CAR 기준으로 조정
     rr_wheel = [TR -TR -TR TR TR;
-                -W/12.0+TW  -W/12.0+TW W/12.0+TW W/12.0+TW -W/12.0+TW]
+                -W_CAR/2.0+TW  -W_CAR/2.0+TW W_CAR/2.0+TW W_CAR/2.0+TW -W_CAR/2.0+TW]
                 
     rl_wheel = [TR -TR -TR TR TR;
-                -W/12.0-TW  -W/12.0-TW W/12.0-TW W/12.0-TW -W/12.0-TW]
+                -W_CAR/2.0-TW  -W_CAR/2.0-TW W_CAR/2.0-TW W_CAR/2.0-TW -W_CAR/2.0-TW]
 
     fr_wheel = [TR -TR -TR TR TR
-                -W/12.0+TW  -W/12.0+TW W/12.0+TW W/12.0+TW -W/12.0+TW]
+                -W_CAR/2.0+TW  -W_CAR/2.0+TW W_CAR/2.0+TW W_CAR/2.0+TW -W_CAR/2.0+TW]
                 
     fl_wheel = [TR -TR -TR TR TR;
-                -W/12.0-TW  -W/12.0-TW W/12.0-TW W/12.0-TW -W/12.0-TW]
+                -W_CAR/2.0-TW  -W_CAR/2.0-TW W_CAR/2.0-TW W_CAR/2.0-TW -W_CAR/2.0-TW]
+    
+    # 트레일러 바퀴는 W_PLANE 폭에 맞추거나, 랜딩기어 위치를 고려해야 함. 
+    # 일단 W_PLANE/4.0 지점에 있다고 가정 (조절 가능)
     tr_wheel = [TR -TR -TR TR TR
-                -W/12.0+TW  -W/12.0+TW W/12.0+TW W/12.0+TW -W/12.0+TW]
+                -W_PLANE/4.0+TW  -W_PLANE/4.0+TW W_PLANE/4.0+TW W_PLANE/4.0+TW -W_PLANE/4.0+TW]
                 
     tl_wheel = [TR -TR -TR TR TR;
-                -W/12.0-TW  -W/12.0-TW W/12.0-TW W/12.0-TW -W/12.0-TW]
+                -W_PLANE/4.0-TW  -W_PLANE/4.0-TW W_PLANE/4.0-TW W_PLANE/4.0-TW -W_PLANE/4.0-TW]
  
     Rot1 = [cos(yaw) sin(yaw);
-           -sin(yaw) cos(yaw)]
+            -sin(yaw) cos(yaw)]
     Rot2 = [cos(steer) sin(steer);
            -sin(steer) cos(steer)]
     Rot3 = [cos(yaw1) sin(yaw1);
-           -sin(yaw1) cos(yaw1)]
+            -sin(yaw1) cos(yaw1)]
 
     fr_wheel = (fr_wheel' * Rot2)'
     fl_wheel = (fl_wheel' * Rot2)'
@@ -366,12 +389,6 @@ function main()
     yaw1 = deg2rad(-10.0)
 
     plot_trailer(x, y, yaw0, yaw1, 0.0)
-
-    DF = (LF + LB)/2.0 - LB
-    DFR = (LF + LB)/2.0 + 0.3 
-
-    DT = (LTF + LTB)/2.0 - LTB
-    DTR = (LTF + LTB)/2.0 + 0.3 
 
     axis("equal")
 
