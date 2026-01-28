@@ -1,1 +1,0 @@
-{"pairs_mode":"upper","ok_count":1,"nodes_file":"maps/node01/node.json","oxoy_file":"maps/node01/node01_oxoy.json","xyreso":0.2,"items":[{"n":177,"cost":34950.22436317645,"ok":true,"file":"path_A1_to_A2_20260123_034010.json","goal_id":"A2","log_dir":"20260123_034018_RT2Y","start_id":"A1"}],"frame_id":"map","count":1,"yawreso":0.2617993877991494}

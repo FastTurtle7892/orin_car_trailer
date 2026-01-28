@@ -128,7 +128,8 @@ def main():
     else:
         if not paths_dir.exists():
             raise FileNotFoundError(f"--paths_dir not found: {paths_dir}")
-        path_files = sorted(paths_dir.glob("path_*.json"))
+        # 하위 폴더를 포함한 모든 폴더의 json 검색 (recursive glob)
+        path_files = sorted(paths_dir.rglob("path_*.json"))
 
     if args.max_paths and len(path_files) > args.max_paths:
         path_files = path_files[: args.max_paths]
